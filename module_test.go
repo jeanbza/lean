@@ -13,6 +13,12 @@ func TestModulePath(t *testing.T) {
 		gopathDir = oldGopathDir
 	}()
 
+	oldFolderExists := folderExists
+	folderExists = func(string) bool { return true }
+	defer func() {
+		folderExists = oldFolderExists
+	}()
+
 	for _, tc := range []struct {
 		in   string
 		want string

@@ -12,6 +12,18 @@ import (
 	"strings"
 )
 
+var (
+	gopathDir    = build.Default.GOPATH
+	folderExists = func(path string) bool {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return false
+		} else if err != nil {
+			panic(err)
+		}
+		return true
+	}
+)
+
 func moduleSize(module string) (int64, error) {
 	path, ok := modulePath(module)
 	if !ok {
@@ -66,11 +78,11 @@ func modulePath(module string) (string, bool) {
 
 	moduleVersion := out[1]
 
-	modulePathParts := append([]string{build.Default.GOPATH, "pkg", "mod"}, nameFirstParts...)
+	modulePathParts := append([]string{gopathDir, "pkg", "mod"}, nameFirstParts...)
 	modulePathParts = append(modulePathParts, nameLastPart+"@"+moduleVersion)
 	modulePath := filepath.Join(modulePathParts...)
 
-	if _, err := os.Stat(modulePath); os.IsNotExist(err) {
+	if !folderExists(modulePath) {
 		return "", false
 	}
 
