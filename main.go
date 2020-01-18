@@ -1,11 +1,11 @@
-// Linguini (lean) displays "go mod graph" output as an interactable graph. lean
+// lean displays "go mod graph" output as an interactable graph. lean
 // allows you to see how your dependencies would change if you deleted one or
 // more edges.
-
+//
 // While existing tools (e.g. golang.org/x/cmd/digraph) are good at answering
 // questions about the actual graph, they're not so helpful with the kind of
 // hypothetical questions you have when you're about to undertake a refactoring.
-// Linguini can help you see the scope of the work ahead of you.
+// lean can help you see the scope of the work ahead of you.
 //
 // Usage:
 //
