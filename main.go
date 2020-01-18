@@ -1,7 +1,3 @@
-// Copyright 2020 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 // Linguini (lean) displays "go mod graph" output as an interactable graph. lean
 // allows you to see how your dependencies would change if you deleted one or
 // more edges.
@@ -18,7 +14,6 @@
 package main
 
 // TODO:
-// - Generate static content à la x/website.
 // - Shorten hashes.
 // - Always return sorted graph, so that graph is more consistently rendered
 //   same way across edge adds/deletes.
