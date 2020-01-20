@@ -11,8 +11,6 @@ import (
 type Vertex struct {
 	Label     string
 	SizeBytes int64
-	// All vertices recursively dominated by this vertex.
-	dominatees []*Vertex
 }
 
 type edge struct {
@@ -264,5 +262,82 @@ func negativeComplementVertices(a, b []*Vertex) []string {
 		}
 		out = append(out, v.Label)
 	}
+	return out
+}
+
+type treeNode struct {
+	v        *Vertex
+	children []*treeNode
+}
+
+// TODO https://www.cs.au.dk/~gerth/advising/thesis/henrik-knakkegaard-christensen.pdf
+func (g *graph) buildDominatorTree() (root *treeNode) {
+
+	return nil
+}
+
+// Used for tests.
+func (a *treeNode) Equal(b *treeNode) bool {
+	if a == nil && b == nil {
+		return true
+	}
+
+	if (a == nil && b != nil) || (a != nil && b == nil) {
+		return false
+	}
+
+	if (a.v == nil && b.v != nil) || (a.v != nil && b.v == nil) {
+		return false
+	}
+
+	if a.v == nil && b.v == nil {
+		return true
+	}
+
+	if a.v.Label != b.v.Label {
+		return false
+	}
+
+	acs := make(map[string]struct{})
+	for _, c := range a.children {
+		acs[c.v.Label] = struct{}{}
+	}
+
+	bcs := make(map[string]*treeNode)
+	for _, c := range b.children {
+		bcs[c.v.Label] = c
+	}
+
+	if len(acs) != len(bcs) {
+		return false
+	}
+
+	for c := range acs {
+		if _, ok := bcs[c]; !ok {
+			return false
+		}
+
+		if !a.Equal(bcs[c]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Used for tests.
+func (tn *treeNode) String() string {
+	if len(tn.children) == 0 {
+		return tn.v.Label
+	}
+
+	out := fmt.Sprintf("%s { ", tn.v.Label)
+	for i, c := range tn.children {
+		if i > 0 {
+			out += " "
+		}
+		out += c.String()
+	}
+	out += " }"
 	return out
 }
