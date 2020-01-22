@@ -57,12 +57,38 @@ func (em edgeMap) remove(from, to *Vertex) error {
 	return nil
 }
 
+func (em edgeMap) removeVertex(v *Vertex) {
+	if em == nil {
+		em = make(edgeMap)
+	}
+	for from, tos := range em {
+		if from == v.Label {
+			delete(em, from)
+		}
+		for to := range tos {
+			if to == v.Label {
+				delete(em[from], to)
+			}
+		}
+	}
+}
+
 func (em edgeMap) vertices() []*Vertex {
 	var out []*Vertex
 	for _, vs := range em {
 		for _, v := range vs {
 			out = append(out, v.From)
 			out = append(out, v.To)
+		}
+	}
+	return out
+}
+
+func (em edgeMap) edges() []*edge {
+	var out []*edge
+	for _, es := range em {
+		for _, e := range es {
+			out = append(out, e)
 		}
 	}
 	return out
@@ -93,11 +119,11 @@ type graph struct {
 
 	mu       sync.Mutex
 	vertices map[string]*Vertex
-	edges    *edgeMap
+	edges    edgeMap
 }
 
 func newGraph(r io.Reader) (*graph, error) {
-	g := &graph{vertices: make(map[string]*Vertex), edges: &edgeMap{}}
+	g := &graph{vertices: make(map[string]*Vertex), edges: edgeMap{}}
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		l := scanner.Text()
@@ -147,13 +173,13 @@ func (g *graph) copy() *graph {
 	newg := &graph{
 		root:     g.root,
 		vertices: make(map[string]*Vertex),
-		edges:    &edgeMap{},
+		edges:    edgeMap{},
 	}
 	for k, v := range g.vertices {
 		newg.vertices[k] = v
 	}
 
-	for _, edges := range *g.edges {
+	for _, edges := range g.edges {
 		for _, edge := range edges {
 			newg.edges.set(edge.From, edge.To)
 		}
@@ -189,6 +215,19 @@ func (g *graph) removeEdge(from, to string) error {
 	return g.edges.remove(g.vertices[from], g.vertices[to])
 }
 
+func (g *graph) removeVertex(v *Vertex) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if _, ok := g.vertices[v.Label]; !ok {
+		return fmt.Errorf("vertex %s does not exist", v.Label)
+	}
+	delete(g.vertices, v.Label)
+	g.edges.removeVertex(v)
+
+	return nil
+}
+
 // connected returns the subgraph that is reachable from root.
 func (g *graph) connected(root string) edgeMap {
 	g.mu.Lock()
@@ -198,14 +237,14 @@ func (g *graph) connected(root string) edgeMap {
 	seenVertices := make(map[string]struct{})
 	var dfs func(from string)
 	dfs = func(from string) {
-		if _, ok := (*g.edges)[from]; !ok {
+		if _, ok := g.edges[from]; !ok {
 			return
 		}
 		if _, ok := seenVertices[from]; ok {
 			return
 		}
 		seenVertices[from] = struct{}{}
-		for _, e := range (*g.edges)[from] {
+		for _, e := range g.edges[from] {
 			sub.set(e.From, e.To)
 			dfs(e.To.Label)
 		}
@@ -214,13 +253,13 @@ func (g *graph) connected(root string) edgeMap {
 	return sub
 }
 
-// hypotheticalCut returns a list of edges and vertices that would be pruned
+// hypotheticalCutEdge returns a list of edges and vertices that would be pruned
 // from the graph if the given (from, to) edge were cut. These lists may be
 // empty but will not be nil.
 //
 // TODO(deklerk): This is inefficient and should be converted to Lengauer-Tarjan
 // https://www.cs.au.dk/~gerth/advising/thesis/henrik-knakkegaard-christensen.pdf.
-func (g *graph) hypotheticalCut(from, to string) (edgeMap, []string, error) {
+func (g *graph) hypotheticalCutEdge(from, to string) (edgeMap, []*Vertex, error) {
 	g.mu.Lock()
 	if _, ok := g.vertices[from]; !ok {
 		g.mu.Unlock()
@@ -247,33 +286,133 @@ func (g *graph) hypotheticalCut(from, to string) (edgeMap, []string, error) {
 	return a.negativeComplement(b), negativeComplementVertices(a.vertices(), b.vertices()), nil
 }
 
+// hypotheticalCutVertex returns a list of vertices that would be pruned if
+// v were cut.
+func (g *graph) hypotheticalCutVertex(v *Vertex) ([]*Vertex, error) {
+	g.mu.Lock()
+	if _, ok := g.vertices[v.Label]; !ok {
+		g.mu.Unlock()
+		return nil, fmt.Errorf("vertex %s does not exist", v.Label)
+	}
+
+	var vChildren []*Vertex
+	for _, c := range g.edges[v.Label] {
+		vChildren = append(vChildren, c.To)
+	}
+	g.mu.Unlock()
+
+	cut := g.copy()
+	if err := cut.removeVertex(v); err != nil {
+		return nil, err
+	}
+
+	a := cut.connected(cut.root)
+	reachableFromChildren := make(map[*Vertex]struct{})
+	for _, c := range vChildren {
+		b := cut.connected(c.Label)
+		for _, bv := range b.vertices() {
+			reachableFromChildren[bv] = struct{}{}
+		}
+	}
+	var b []*Vertex
+	for bv := range reachableFromChildren {
+		b = append(b, bv)
+	}
+
+	return negativeComplementVertices(a.vertices(), b), nil
+}
+
 // Returns !(a \ b).
 // https://en.wikipedia.org/wiki/Complement_(set_theory)
-func negativeComplementVertices(a, b []*Vertex) []string {
+func negativeComplementVertices(a, b []*Vertex) []*Vertex {
 	amap := make(map[*Vertex]struct{})
 	for _, v := range a {
 		amap[v] = struct{}{}
 	}
 
-	out := []string{}
+	out := []*Vertex{}
 	for _, v := range b {
 		if _, ok := amap[v]; ok {
 			continue
 		}
-		out = append(out, v.Label)
+		out = append(out, v)
 	}
 	return out
 }
 
 type treeNode struct {
 	v        *Vertex
+	parent   *treeNode
 	children []*treeNode
 }
 
+// TODO locking/unlocking
 // TODO https://www.cs.au.dk/~gerth/advising/thesis/henrik-knakkegaard-christensen.pdf
-func (g *graph) buildDominatorTree() (root *treeNode) {
+func (g *graph) buildVertexDominatorTree() (root *treeNode, _ error) {
+	dominates := make(map[*Vertex][]*Vertex)
+	treeMap := make(map[*Vertex]*treeNode)
 
-	return nil
+	for _, v := range g.vertices {
+		cutVs, err := g.hypotheticalCutVertex(v)
+		if err != nil {
+			return nil, err
+		}
+		dominates[v] = cutVs
+		treeMap[v] = &treeNode{}
+	}
+
+	for dominator, dominatees := range dominates {
+		dominatorTreeNode := treeMap[dominator]
+
+	dominateesLoop:
+		for _, dv := range dominatees {
+			dvTreeNode := treeMap[dv]
+			if dvTreeNode.parent == nil {
+				dominatorTreeNode.children = append(dominatorTreeNode.children, dvTreeNode)
+				dvTreeNode.parent = dominatorTreeNode
+			} else {
+				in := func(haystack []*Vertex, needle *Vertex) bool {
+					for _, v := range haystack {
+						if needle == v {
+							return true
+						}
+					}
+					return false
+				}
+
+				for parent := dvTreeNode.parent; parent != nil; parent = parent.parent {
+					if parent.parent == nil && in(dominatees, parent.v) {
+						// w' is dominated by w. So, w' must be a child of w.
+						dominatorTreeNode.children = append(dominatorTreeNode.children, parent)
+						parent.parent = dominatorTreeNode
+						continue dominateesLoop
+					}
+
+					w1prime := parent.parent
+					w2prime := parent
+					if in(dominatees, w2prime.v) && in(dominates[w1prime.v], dv) {
+						// w should go in between w'1 and w'2 (all of which are
+						// above v).
+						if dvTreeNode.parent != nil {
+							panic("ahhh! dvTreeNode already has a parent, though. wtf?")
+						}
+
+						dvTreeNode.parent = w2prime
+						w2prime.children = append(w2prime.children, dvTreeNode)
+
+						dvTreeNode.children = append(dvTreeNode.children, w1prime)
+						w1prime.parent = dvTreeNode
+
+						continue dominateesLoop
+					}
+				}
+
+				panic("ahhh! couldn't find a place for this vertex!")
+			}
+		}
+	}
+
+	return treeMap[g.vertices[g.root]], nil
 }
 
 // Used for tests.
@@ -327,6 +466,14 @@ func (a *treeNode) Equal(b *treeNode) bool {
 
 // Used for tests.
 func (tn *treeNode) String() string {
+	if tn == nil {
+		return "<nil>"
+	}
+
+	if tn.children == nil {
+		return "{ }"
+	}
+
 	if len(tn.children) == 0 {
 		return tn.v.Label
 	}

@@ -152,7 +152,7 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 
-		cutEdges, cutVertices, err := userGraph.hypotheticalCut(from, to)
+		cutEdges, cutVertices, err := userGraph.hypotheticalCutEdge(from, to)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)

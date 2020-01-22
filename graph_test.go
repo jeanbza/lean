@@ -1,10 +1,11 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
-import "bytes"
-
-func TestBuildDominatorTree(t *testing.T) {
+func TestBuildVertexDominatorTree(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		in   string
@@ -97,7 +98,10 @@ func TestBuildDominatorTree(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := g.buildDominatorTree()
+			got, err := g.buildVertexDominatorTree()
+			if err != nil {
+				t.Fatal(err)
+			}
 			if !got.Equal(tc.want) {
 				t.Fatalf("got %s, want %s", got, tc.want)
 			}
