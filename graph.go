@@ -94,6 +94,51 @@ func (em edgeMap) edges() []*edge {
 	return out
 }
 
+func (a edgeMap) Equal(b edgeMap) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for from, tos := range a {
+		if _, ok := b[from]; !ok {
+			return false
+		}
+
+		for to := range tos {
+			if _, ok := b[from][to]; !ok {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (em edgeMap) String() string {
+	if em == nil {
+		return "<nil>"
+	}
+
+	var out string
+	var i int
+	for from, tos := range em {
+		if i != 0 {
+			out += "\n"
+		}
+		out += from + ": "
+		var i2 int
+		for to := range tos {
+			if i2 != 0 {
+				out += " "
+			}
+			out += to
+			i2++
+		}
+		i++
+	}
+	return out
+}
+
 // Returns !(a \ b).
 // https://en.wikipedia.org/wiki/Complement_(set_theory)
 func (a edgeMap) negativeComplement(b edgeMap) edgeMap {
@@ -131,12 +176,11 @@ func newGraph(r io.Reader) (*graph, error) {
 			continue
 		}
 		parts := strings.Fields(l)
-		if len(parts) != 2 {
+		if len(parts) == 0 {
 			return nil, fmt.Errorf("expected 2 words in line, but got %d: %s", len(parts), l)
 		}
-		from := parts[0]
-		to := parts[1]
 
+		from := parts[0]
 		if _, ok := g.vertices[from]; !ok {
 			sizeBytes, err := moduleSize(from)
 			if err != nil {
@@ -144,6 +188,31 @@ func newGraph(r io.Reader) (*graph, error) {
 			}
 			g.vertices[from] = &Vertex{Label: from, SizeBytes: sizeBytes}
 		}
+
+		// `go mod graph` always presents the root as the first "from" node
+		if g.root == "" {
+			g.root = from
+		}
+
+		if len(parts) == 1 {
+			// We got a 1 word sentence.
+
+			if len(g.vertices) == 1 {
+				// There was only a single sentence. So, that's ok: it's a 1
+				// vertex graph with 0 edges.
+				g.edges[from] = make(map[string]*edge)
+				break
+			}
+
+			return nil, fmt.Errorf("got a 1 word sentence: '%s'. that's ok by "+
+				"itself - a graph with 1 vertex that has no edges is valid. however, "+
+				"we have already seen %d vertices, so what does this solitary vertex "+
+				"mean? this is a graph, not a forest! :)", l, len(g.vertices)-1)
+
+		}
+
+		to := parts[1]
+
 		if _, ok := g.vertices[to]; !ok {
 			sizeBytes, err := moduleSize(to)
 			if err != nil {
@@ -153,11 +222,6 @@ func newGraph(r io.Reader) (*graph, error) {
 		}
 
 		g.edges.set(g.vertices[from], g.vertices[to])
-
-		// `go mod graph` always presents the root as the first "from" node
-		if g.root == "" {
-			g.root = from
-		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -309,7 +373,8 @@ func (g *graph) hypotheticalCutVertex(v *Vertex) ([]*Vertex, error) {
 	a := cut.connected(cut.root)
 	reachableFromChildren := make(map[*Vertex]struct{})
 	for _, c := range vChildren {
-		b := cut.connected(c.Label)
+		b := g.connected(c.Label)
+		reachableFromChildren[c] = struct{}{}
 		for _, bv := range b.vertices() {
 			reachableFromChildren[bv] = struct{}{}
 		}
@@ -320,6 +385,20 @@ func (g *graph) hypotheticalCutVertex(v *Vertex) ([]*Vertex, error) {
 	}
 
 	return negativeComplementVertices(a.vertices(), b), nil
+}
+
+func (g *graph) String() string {
+	if g == nil {
+		return "<nil>"
+	}
+	if g.edges == nil {
+		return ""
+	}
+	return g.edges.String()
+}
+
+func (a *graph) Equal(b *graph) bool {
+	return a.edges.Equal(b.edges)
 }
 
 // Returns !(a \ b).
@@ -358,7 +437,7 @@ func (g *graph) buildVertexDominatorTree() (root *treeNode, _ error) {
 			return nil, err
 		}
 		dominates[v] = cutVs
-		treeMap[v] = &treeNode{}
+		treeMap[v] = &treeNode{v: v}
 	}
 
 	for dominator, dominatees := range dominates {
@@ -437,9 +516,9 @@ func (a *treeNode) Equal(b *treeNode) bool {
 		return false
 	}
 
-	acs := make(map[string]struct{})
+	acs := make(map[string]*treeNode)
 	for _, c := range a.children {
-		acs[c.v.Label] = struct{}{}
+		acs[c.v.Label] = c
 	}
 
 	bcs := make(map[string]*treeNode)
@@ -451,12 +530,12 @@ func (a *treeNode) Equal(b *treeNode) bool {
 		return false
 	}
 
-	for c := range acs {
-		if _, ok := bcs[c]; !ok {
+	for acLabel, ac := range acs {
+		if _, ok := bcs[acLabel]; !ok {
 			return false
 		}
 
-		if !a.Equal(bcs[c]) {
+		if !ac.Equal(bcs[acLabel]) {
 			return false
 		}
 	}
@@ -470,11 +549,11 @@ func (tn *treeNode) String() string {
 		return "<nil>"
 	}
 
-	if tn.children == nil {
-		return "{ }"
+	if tn.v == nil {
+		return "<nil vertex>"
 	}
 
-	if len(tn.children) == 0 {
+	if tn.children == nil || len(tn.children) == 0 {
 		return tn.v.Label
 	}
 
