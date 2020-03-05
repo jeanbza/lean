@@ -13,18 +13,6 @@
 //	go mod graph | digraph transpose | lean
 package main
 
-// TODO:
-// - Shorten hashes.
-// - Always return sorted graph, so that graph is more consistently rendered
-//   same way across edge adds/deletes.
-// - Calculate # vertices removed by cut per edge.
-// - Calculate # bytes removed by cut per edge.
-// - Calculate # usages of 'to' by 'from' per edge.
-// - Show cost/value ratio per edge.
-// - Refactor connectedness algorithm to use dominator tree for better
-//   performance.
-// - Tests, especially around connectedness algorithms.
-
 import (
 	"encoding/json"
 	"flag"

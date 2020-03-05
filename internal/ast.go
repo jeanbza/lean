@@ -3,18 +3,39 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 // PackageUsagesForModule finds the number of times each of the given module's
 // module dependencies are referred to.
-func ModuleUsagesForModule(moduleRootPath string) (map[string]int, error) {
-	return nil, nil
+func ModuleUsagesForModule(module string) (map[string]int, error) {
+	// TODO: try current directory, then vendor, then GOPATH
+	moduleRootPath := filepath.Join(build.Default.GOPATH, "pkg", "mod", module)
+
+	packageCounts, err := PackageUsagesForModule(moduleRootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	moduleCounts := make(map[string]int)
+	for p, c := range packageCounts {
+		mn, err := moduleName(p)
+		if err != nil {
+			return nil, err
+		}
+		moduleCounts[mn] += c
+	}
+
+	return moduleCounts, nil
 }
 
 // PackageUsagesForModule finds the number of times each of the given module's
@@ -46,8 +67,28 @@ func PackageUsagesForModule(moduleRootPath string) (map[string]int, error) {
 	return moduleUsages, nil
 }
 
+func moduleName(packageName string) (string, error) {
+	parts := strings.Split(packageName, "/")
+
+	for i := range parts {
+		modulePathParts := append([]string{build.Default.GOPATH, "pkg", "mod"}, parts[0:len(parts)-1-i]...)
+		fi, err := os.Stat(filepath.Join(modulePathParts...))
+		if err == os.ErrNotExist {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if fi.IsDir() {
+			return strings.Join(parts[0:len(parts)-1-i], "/"), nil
+		}
+	}
+
+	return "", errors.New("this should not have happened...")
+}
+
 type goListItem struct {
-	GoFiles []string `json:"GoFiles"`
+	GoFiles     []string `json:"GoFiles"`
 	TestGoFiles []string `json:"XTestGoFiles"`
 }
 
