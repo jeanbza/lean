@@ -23,16 +23,10 @@ func main() {
 		from := parts[0]
 		to := parts[1]
 
-		usagesFrom, err := internal.ModuleUsagesForModule(from)
-		if err != nil {
-			panic(err)
-		}
+		usagesFrom := internal.ModuleUsagesForModule(from)
 		fmt.Println(from, usagesFrom)
 
-		usagesTo, err := internal.ModuleUsagesForModule(to)
-		if err != nil {
-			panic(err)
-		}
+		usagesTo := internal.ModuleUsagesForModule(to)
 		fmt.Println(to, usagesTo)
 	}
 	if err := scanner.Err(); err != nil {

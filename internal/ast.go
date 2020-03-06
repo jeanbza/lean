@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -17,57 +19,45 @@ import (
 
 // PackageUsagesForModule finds the number of times each of the given module's
 // module dependencies are referred to.
-func ModuleUsagesForModule(module string) (map[string]int, error) {
-	// TODO: try current directory, then vendor, then GOPATH
-	moduleRootPath := filepath.Join(build.Default.GOPATH, "pkg", "mod", module)
-
-	packageCounts, err := PackageUsagesForModule(moduleRootPath)
-	if err != nil {
-		return nil, err
+func ModuleUsagesForModule(module string) map[string]int {
+	moduleRootPath := attemptToFindModuleOnFS(module)
+	if moduleRootPath == "" {
+		panic(fmt.Errorf("could not find module %s on file system", module))
 	}
+
+	packageCounts := PackageUsagesForModule(moduleRootPath)
 
 	moduleCounts := make(map[string]int)
 	for p, c := range packageCounts {
-		mn, err := moduleName(p)
-		if err != nil {
-			return nil, err
-		}
+		mn := moduleName(p)
 		moduleCounts[mn] += c
 	}
 
-	return moduleCounts, nil
+	return moduleCounts
 }
 
 // PackageUsagesForModule finds the number of times each of the given module's
 // package dependencies are referred to.
-func PackageUsagesForModule(moduleRootPath string) (map[string]int, error) {
-	files, err := moduleFiles(moduleRootPath)
-	if err != nil {
-		return nil, err
-	}
+func PackageUsagesForModule(moduleRootPath string) map[string]int {
+	files := moduleFiles(moduleRootPath)
 
 	moduleUsages := make(map[string]int)
 
 	for _, f := range files {
 		outBytes, err := ioutil.ReadFile(f)
 		if err != nil {
-			return nil, err
+			panic(err)
 		}
 
-		usages, err := PackageUsages(string(outBytes))
-		if err != nil {
-			return nil, err
-		}
-
-		for k, v := range usages {
+		for k, v := range PackageUsages(string(outBytes)) {
 			moduleUsages[k] += v
 		}
 	}
 
-	return moduleUsages, nil
+	return moduleUsages
 }
 
-func moduleName(packageName string) (string, error) {
+func moduleName(packageName string) string {
 	parts := strings.Split(packageName, "/")
 
 	for i := range parts {
@@ -77,53 +67,66 @@ func moduleName(packageName string) (string, error) {
 			continue
 		}
 		if err != nil {
-			return "", err
+			continue
 		}
 		if fi.IsDir() {
-			return strings.Join(parts[0:len(parts)-1-i], "/"), nil
+			return strings.Join(parts[0:len(parts)-1-i], "/")
 		}
 	}
 
-	return "", errors.New("this should not have happened...")
-}
-
-type goListItem struct {
-	GoFiles     []string `json:"GoFiles"`
-	TestGoFiles []string `json:"XTestGoFiles"`
+	panic(errors.New("this should not have happened..."))
 }
 
 // moduleFiles finds all the files of a module (given the module's root path).
-func moduleFiles(moduleRootPath string) ([]string, error) {
+func moduleFiles(moduleRootPath string) []string {
+	type GoList struct {
+		Dir         string   `json:"Dir"`
+		GoFiles     []string `json:"GoFiles"`
+		TestGoFiles []string `json:"XTestGoFiles"`
+	}
+
 	cmd := exec.Command("go", "list", "-json", "./...")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Dir = moduleRootPath
 	err := cmd.Run()
 	if err != nil {
-		return nil, err
-	}
-
-	var outDecoded []goListItem
-	if err := json.NewDecoder(&out).Decode(&outDecoded); err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	var files []string
-	for _, i := range outDecoded {
-		files = append(files, i.GoFiles...)
-		files = append(files, i.TestGoFiles...)
+	dec := json.NewDecoder(&out)
+	for {
+		var outDecoded GoList
+
+		err := dec.Decode(&outDecoded)
+		if err == io.EOF {
+			// all done
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		for _, f := range outDecoded.GoFiles {
+			files = append(files, filepath.Join(outDecoded.Dir, f))
+		}
+
+		for _, f := range outDecoded.TestGoFiles {
+			files = append(files, filepath.Join(outDecoded.Dir, f))
+		}
 	}
 
-	return files, nil
+	return files
 }
 
 // PackageUsages analyzes the given code, records the imported package, and
 // counts the number of times that each imported package is used.
-func PackageUsages(src string) (map[string]int, error) {
+func PackageUsages(src string) map[string]int {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "does-not-seem-to-matter.go", src, 0)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	out := map[string]int{}
@@ -176,5 +179,53 @@ func PackageUsages(src string) (map[string]int, error) {
 		out[longName] = usages
 	}
 
-	return out, nil
+	return out
+}
+
+func attemptToFindModuleOnFS(module string) string {
+	gopathAttempt := filepath.Join(build.Default.GOPATH, "pkg", "mod", module)
+	if _, err := os.Stat(gopathAttempt); err == nil {
+		return gopathAttempt
+	}
+
+	curdir, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	curModuleRootName, curModuleRootPath := getModuleRoot(curdir)
+	if curModuleRootName == module {
+		return curModuleRootPath
+	}
+
+	// TODO: try vendor
+
+	return ""
+}
+
+func getModuleRoot(dir string) (name, root string) {
+	type Module struct {
+		Path string `json:"Path"`
+		Dir  string `json:"Dir"`
+	}
+
+	type GoListOutput struct {
+		Mod Module `json:"Module"`
+	}
+
+	decoded := GoListOutput{}
+
+	cmd := exec.Command("go", "list", "-json", "./...")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Dir = dir
+	err := cmd.Run()
+	if err != nil {
+		panic(err)
+	}
+
+	if err := json.NewDecoder(&out).Decode(&decoded); err != nil {
+		panic(err)
+	}
+
+	return decoded.Mod.Path, decoded.Mod.Dir
 }
