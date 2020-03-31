@@ -108,6 +108,7 @@ func moduleFiles(moduleRootPath string) []string {
 	cmd := exec.Command("go", "list", "-json", "./...")
 	var out bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = os.Stdout
 	cmd.Dir = moduleRootPath
 	err := cmd.Run()
 	if err != nil {
@@ -239,6 +240,7 @@ func getModuleRoot(dir string) (name, root string) {
 	cmd := exec.Command("go", "list", "-json", "./...")
 	var out bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = os.Stdout
 	cmd.Dir = dir
 	err := cmd.Run()
 	if err != nil {
