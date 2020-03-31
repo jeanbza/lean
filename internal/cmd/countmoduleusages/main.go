@@ -10,6 +10,8 @@ import (
 )
 
 func main() {
+	seen := make(map[string]bool)
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		l := scanner.Text()
@@ -23,11 +25,15 @@ func main() {
 		from := parts[0]
 		to := parts[1]
 
-		usagesFrom := internal.ModuleUsagesForModule(from)
-		fmt.Println(from, usagesFrom)
+		if !seen[from] {
+			fmt.Println(from, internal.ModuleUsagesForModule(from))
+			seen[from] = true
+		}
 
-		usagesTo := internal.ModuleUsagesForModule(to)
-		fmt.Println(to, usagesTo)
+		if !seen[to] {
+			fmt.Println(from, internal.ModuleUsagesForModule(to))
+			seen[to] = true
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		panic(err)

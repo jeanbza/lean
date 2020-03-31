@@ -75,7 +75,8 @@ func modulePath(module string) (string, bool) {
 	return modulePath, true
 }
 
-func folderExists(path string) bool {
+// A variable for testing purposes.
+var folderExists = func(path string) bool {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return false
 	} else if err != nil {

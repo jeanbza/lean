@@ -22,7 +22,7 @@ import (
 func ModuleUsagesForModule(module string) map[string]int {
 	moduleRootPath := attemptToFindModuleOnFS(module)
 	if moduleRootPath == "" {
-		panic(fmt.Errorf("could not find module %s on file system", module))
+		panic(fmt.Errorf("could not find module %s on file system. try `go install %s`?", module, module))
 	}
 
 	packageCounts := PackageUsagesForModule(moduleRootPath)
@@ -57,20 +57,34 @@ func PackageUsagesForModule(moduleRootPath string) map[string]int {
 	return moduleUsages
 }
 
+// moduleName takes a packageName and attempts to figure out the module name. It
+// does so by looking in $GOPATH/pkg/mod and gradually stripping away parts
+// (ex /foo) from the packageName until it finds a directory (module) that
+// matches.
+//
+// TODO: This is hacky - it'd be much nicer if there was a library that figured
+// this out holistically, or perhaps by querying module proxy.
 func moduleName(packageName string) string {
 	parts := strings.Split(packageName, "/")
 
 	for i := range parts {
 		modulePathParts := append([]string{build.Default.GOPATH, "pkg", "mod"}, parts[0:len(parts)-1-i]...)
 		fi, err := os.Stat(filepath.Join(modulePathParts...))
-		if err == os.ErrNotExist {
+		if _, ok := err.(*os.PathError); ok {
+			// If this isn't a directory - keep going!
 			continue
 		}
 		if err != nil {
-			continue
+			// Ok this is actually a real error.
+			panic(err)
 		}
 		if fi.IsDir() {
-			return strings.Join(parts[0:len(parts)-1-i], "/")
+			mn := strings.Join(parts[0:len(parts)-1-i], "/")
+			if mn == "" {
+				// Probably stdlib (something like "io" or "io/ioutil").
+				return "stdlib"
+			}
+			return mn
 		}
 	}
 
@@ -122,6 +136,8 @@ func moduleFiles(moduleRootPath string) []string {
 
 // PackageUsages analyzes the given code, records the imported package, and
 // counts the number of times that each imported package is used.
+//
+// It panics if it encounters a problem. (for better stacktraces heh)
 func PackageUsages(src string) map[string]int {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "does-not-seem-to-matter.go", src, 0)

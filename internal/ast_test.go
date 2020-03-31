@@ -60,16 +60,29 @@ import gaz "github.com/foo/bar"
 var X = gaz.Y`,
 			want: map[string]int{"github.com/foo/bar": 1},
 		},
+		{
+			desc: "stdlib",
+			src: `package main
+import "os"
+import "os/exec"
+var X = os.ErrInvalid
+var Y = os.ErrExist
+var Z = exec.Cmd{}`,
+			want: map[string]int{"os": 2, "os/exec": 1},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := internal.PackageUsages(tc.src)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := internal.PackageUsages(tc.src)
 
 			if diff := cmp.Diff(got, tc.want); diff != "" {
 				t.Fatalf("expected %v, got %v\n\t%s", tc.want, got, diff)
 			}
 		})
 	}
+}
+
+func TestModuleName(t *testing.T) {
+	// TODO
+	// Basic test "github.com/user/module/pkg" -> "github.com/user/module"
+	// Stdlib test "os/exec" -> "stdlib"
 }
