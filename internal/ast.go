@@ -106,17 +106,18 @@ func moduleFiles(moduleRootPath string) []string {
 	}
 
 	cmd := exec.Command("go", "list", "-json", "./...")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stdout
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	cmd.Dir = moduleRootPath
 	err := cmd.Run()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", moduleRootPath, stderr.String(), err))
 	}
 
 	var files []string
-	dec := json.NewDecoder(&out)
+	dec := json.NewDecoder(&stdout)
 	for {
 		var outDecoded GoList
 
@@ -238,16 +239,17 @@ func getModuleRoot(dir string) (name, root string) {
 	decoded := GoListOutput{}
 
 	cmd := exec.Command("go", "list", "-json", "./...")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stdout
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	cmd.Dir = dir
 	err := cmd.Run()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", dir, stderr.String(), err))
 	}
 
-	if err := json.NewDecoder(&out).Decode(&decoded); err != nil {
+	if err := json.NewDecoder(&stdout).Decode(&decoded); err != nil {
 		panic(err)
 	}
 
