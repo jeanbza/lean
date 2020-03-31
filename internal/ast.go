@@ -98,6 +98,8 @@ func moduleName(packageName string) string {
 }
 
 // moduleFiles finds all the files of a module (given the module's root path).
+// TODO(deklerk): We need to copy the $GOPATH/mod/pkg to /tmp first, since
+// $GOPATH is protected by -mod=readonly.
 func moduleFiles(moduleRootPath string) []string {
 	type GoList struct {
 		Dir         string   `json:"Dir"`
