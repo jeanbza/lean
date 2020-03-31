@@ -19,21 +19,27 @@ import (
 
 // PackageUsagesForModule finds the number of times each of the given module's
 // module dependencies are referred to.
-func ModuleUsagesForModule(module string) map[string]int {
-	moduleRootPath := attemptToFindModuleOnFS(module)
+func ModuleUsagesForModule(from, to string) int {
+	moduleRootPath := attemptToFindModuleOnFS(from)
 	if moduleRootPath == "" {
-		panic(fmt.Errorf("could not find module %s on file system. try `go install %s`?", module, module))
+		panic(fmt.Errorf("could not find module %s on file system. try `go install %s`?", from, from))
 	}
 
 	packageCounts := PackageUsagesForModule(moduleRootPath)
 
-	moduleCounts := make(map[string]int)
 	for p, c := range packageCounts {
-		mn := moduleName(p)
-		moduleCounts[mn] += c
+		// TODO(deklerk): This basically looks for the first module that looks
+		// like the given package. This falls down in two places:
+		// 1. v1 would match a v2 (substring match!). etc for all version
+		// 2. github.com/user/module/foo/submod/pkg would match
+		// github.com/user/module/foo/submod (good!) as well as
+		// parent github.com/user/module (bad!)
+		if strings.Contains(to, p) {
+			return c
+		}
 	}
 
-	return moduleCounts
+	return 0
 }
 
 // PackageUsagesForModule finds the number of times each of the given module's

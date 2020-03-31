@@ -30,12 +30,12 @@ const prettifySize = sizeBytes => {
   const sizeMb = Math.ceil(sizeBytes/bytesInMb)
   return `${sizeMb}mb`
 }
-const prettifyRatio = (sizeBytes, numUsages) => {
-  if (sizeBytes == 0 || numUsages == 0) {
+const prettifyRatio = edge => {
+  if (edge.To.SizeBytes == 0 || edge.NumUsages == 0) {
     return '?'
   }
-  const sizeMb = Math.ceil(sizeBytes/bytesInMb)
-  const ratio = sizeMb / numUsages
+  const sizeMb = Math.ceil(edge.To.SizeBytes/bytesInMb)
+  const ratio = sizeMb / edge.NumUsages
   return ratio.toFixed(2)
 }
 
@@ -115,13 +115,36 @@ const drawList = (id, entries, clickMethod) => {
   const el = document.getElementById(id)
   el.innerHTML = ''
 
-  Object.entries(entries).forEach(entry => {
-    const from = entry[0]
-    const tos = entry[1]
-    for (const to in tos) {
-      const toSize = prettifySize(tos[to].To.SizeBytes)
-      const toPackageUsages = tos[to].NumUsages
-      const ratio = prettifyRatio(tos[to].To.SizeBytes, toPackageUsages)
+  Object.entries(entries)
+    .map(entry => { // Map of map of entry => array of array of from,to pairs.
+      const from = entry[0]
+      const tos = entry[1]
+      const out = []
+      for (const to in tos) {
+        out.push([from, to])
+      }
+      return out
+    })
+    .reduce((e1, e2) => [...e1, ...e2], []) // Array of arrays of from,to pairs => array of from,to pairs.
+    .map(entry => { // Entry => edge.
+      const from = entry[0]
+      const to = entry[1]
+      const edge = entries[from][to]
+      return edge
+    })
+    .sort((edge1, edge2) => { // Sort by ratio.
+      const e1ratio = prettifyRatio(edge1)
+      const e2ratio = prettifyRatio(edge2)
+      if (e1ratio < e2ratio) return -1
+      if (e1ratio > e2ratio) return 1
+      return 0
+    })
+    .forEach(edge => { // Print to page.
+      const from = edge.From.Label
+      const to = edge.To.Label
+      const toSize = prettifySize(edge.To.SizeBytes)
+      const toPackageUsages = edge.NumUsages
+      const ratio = prettifyRatio(edge)
 
       // Create a new list item.
       const newEdgeRow = document.createElement('div')
@@ -168,8 +191,7 @@ const drawList = (id, entries, clickMethod) => {
       newEdgeRow.onmouseover = _ => focusInEdge(from, to)
       newEdgeRow.onmouseout = _ => focusOutEdge(from, to)
       el.appendChild(newEdgeRow)
-    }
-  })
+    })
 }
 
 const focusInEdge = (from, to) => {

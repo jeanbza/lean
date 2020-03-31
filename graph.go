@@ -6,12 +6,15 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/jadekler/lean/internal"
 )
 
 type Vertex struct {
 	Label     string
 	SizeBytes int64
 	// All vertices recursively dominated by this vertex.
+	// NOT YET IMPLEMENTED.
 	dominatees []*Vertex
 }
 
@@ -19,7 +22,7 @@ type edge struct {
 	From *Vertex
 	To   *Vertex
 	// Number of times that from uses to. (AST parsing)
-	NumUsages int64
+	NumUsages int
 }
 
 // edgeMap is the map of edges in a graph.
@@ -45,7 +48,7 @@ func (em edgeMap) set(from, to *Vertex) {
 	if _, ok := em[from.Label]; !ok {
 		em[from.Label] = make(map[string]*edge)
 	}
-	em[from.Label][to.Label] = &edge{From: from, To: to}
+	em[from.Label][to.Label] = &edge{From: from, To: to, NumUsages: internal.ModuleUsagesForModule(from.Label, to.Label)}
 }
 
 func (em edgeMap) remove(from, to *Vertex) error {
