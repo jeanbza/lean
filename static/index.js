@@ -24,11 +24,19 @@ svg.attr('height', g.graph().height * initialScale + 40)
 
 const bytesInMb = 1000000
 const prettifySize = sizeBytes => {
-  if (sizeBytes > 0) {
-    const sizeMb = Math.floor(sizeBytes/bytesInMb)
-    return `${sizeMb > 0 ? sizeMb : 1}mb`
+  if (sizeBytes == 0) {
+    return '?'
   }
-  return '(unknown size)'
+  const sizeMb = Math.ceil(sizeBytes/bytesInMb)
+  return `${sizeMb}mb`
+}
+const prettifyRatio = (sizeBytes, numUsages) => {
+  if (sizeBytes == 0 || numUsages == 0) {
+    return '?'
+  }
+  const sizeMb = Math.ceil(sizeBytes/bytesInMb)
+  const ratio = sizeMb / numUsages
+  return ratio.toFixed(2)
 }
 
 const redrawGraph = graph => {
@@ -112,6 +120,8 @@ const drawList = (id, entries, clickMethod) => {
     const tos = entry[1]
     for (const to in tos) {
       const toSize = prettifySize(tos[to].To.SizeBytes)
+      const toPackageUsages = tos[to].NumUsages
+      const ratio = prettifyRatio(tos[to].To.SizeBytes, toPackageUsages)
 
       // Create a new list item.
       const newEdgeRow = document.createElement('div')
@@ -122,10 +132,10 @@ const drawList = (id, entries, clickMethod) => {
       rowText.className = 'edge'
       newEdgeRow.appendChild(rowText)
 
-      // Add size.
+      // Add size / usage ratio.
       const sizeText = document.createElement('div')
-      sizeText.innerHTML = `${toSize}`
-      sizeText.className = 'size'
+      sizeText.innerHTML = `${toSize} / ${toPackageUsages} = ${ratio}`
+      sizeText.className = 'ratio'
       newEdgeRow.appendChild(sizeText)
   
       // Add button.

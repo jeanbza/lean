@@ -19,7 +19,7 @@ type edge struct {
 	From *Vertex
 	To   *Vertex
 	// Number of times that from uses to. (AST parsing)
-	numUsages int64
+	NumUsages int64
 }
 
 // edgeMap is the map of edges in a graph.
