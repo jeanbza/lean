@@ -60,3 +60,11 @@ h3 {
 button.right {
     background-color: whitesmoke;
 }
+
+.edgeRow .edge {
+    flex: 1;
+}
+
+.edgeRow .size {
+    padding-right: 10px;
+}

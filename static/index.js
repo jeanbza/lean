@@ -22,6 +22,15 @@ svg.call(zoom.transform, d3.zoomIdentity.translate(20, 0).scale(initialScale))
 
 svg.attr('height', g.graph().height * initialScale + 40)
 
+const bytesInMb = 1000000
+const prettifySize = sizeBytes => {
+  if (sizeBytes > 0) {
+    const sizeMb = Math.floor(sizeBytes/bytesInMb)
+    return `${sizeMb > 0 ? sizeMb : 1}mb`
+  }
+  return '(unknown size)'
+}
+
 const redrawGraph = graph => {
   // Remove initial node.
   g.removeNode('loading')
@@ -60,15 +69,6 @@ const redrawGraph = graph => {
     const from = entry[0]
     const tos = entry[1]
     for (const to in tos) {
-      const bytesInMb = 1000000
-      const prettifySize = sizeBytes => {
-        if (sizeBytes > 0) {
-          const sizeMb = Math.floor(sizeBytes/bytesInMb)
-          return `${sizeMb > 0 ? sizeMb : 1}mb`
-        }
-        return '(unknown size)'
-      }
-
       const fromSize = prettifySize(tos[to].From.SizeBytes)
       const toSize = prettifySize(tos[to].To.SizeBytes)
 
@@ -111,14 +111,22 @@ const drawList = (id, entries, clickMethod) => {
     const from = entry[0]
     const tos = entry[1]
     for (const to in tos) {
+      const toSize = prettifySize(tos[to].To.SizeBytes)
+
       // Create a new list item.
       const newEdgeRow = document.createElement('div')
 
       // Add text.
       const rowText = document.createElement('div')
       rowText.innerHTML = `${from} -> ${to}`
-      rowText.className = 'left'
+      rowText.className = 'edge'
       newEdgeRow.appendChild(rowText)
+
+      // Add size.
+      const sizeText = document.createElement('div')
+      sizeText.innerHTML = `${toSize}`
+      sizeText.className = 'size'
+      newEdgeRow.appendChild(sizeText)
   
       // Add button.
       const rowButton = document.createElement('button')
