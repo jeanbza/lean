@@ -20,9 +20,14 @@ import (
 // PackageUsagesForModule finds the number of times each of the given module's
 // module dependencies are referred to.
 func ModuleUsagesForModule(from, to string) int {
+	fmt.Printf("ModuleUsagesForModule(%s, %s)\n", from, to)
+
+	// TODO(deklerk): Capital letters need to be replaced with !lowercase. Ex
+	// github.com/Shopify/sarama@v1.23.1 becomes github.com/!shopify/sarama@v1.23.1
 	moduleRootPath := attemptToFindModuleOnFS(from)
 	if moduleRootPath == "" {
-		panic(fmt.Errorf("could not find module %s on file system. try `go install %s`?", from, from))
+		// TODO: We should probably try "go get" here.
+		panic(fmt.Errorf("could not find module %s on file system. try `go get %s`?", from, from))
 	}
 
 	packageCounts := PackageUsagesForModule(moduleRootPath)
@@ -101,21 +106,56 @@ func moduleName(packageName string) string {
 // TODO(deklerk): We need to copy the $GOPATH/mod/pkg to /tmp first, since
 // $GOPATH is protected by -mod=readonly.
 func moduleFiles(moduleRootPath string) []string {
+	// Copy $GOPATH/mod/pkg/moduleRootPath to /tmp because we can't run
+	// `go list` in $GOPATH due to -mod=readonly restriction.
+	tmpdir, err := ioutil.TempDir("", "list-tmp")
+	if err != nil {
+		panic(err)
+	}
+
+	newDir := tmpdir + "/listme"
+	cpCMD := exec.Command("cp", "-R", moduleRootPath, newDir)
+	cpCMD.Stderr = os.Stderr
+	if err := cpCMD.Run(); err != nil {
+		panic(err)
+	}
+
+	// Set permissions so that we can modify go.mod / go.sum. (well, so that
+	// go list can)
+	//
+	// NOTE: This won't work on windows, will it? 0777 looks very linux
+	// specific.
+	if err := os.Chmod(newDir, 0777); err != nil {
+		panic(err)
+	}
+	if err := os.Chmod(filepath.Join(newDir, "go.mod"), 0777); err != nil {
+		panic(err)
+	}
+	touchCMD := exec.Command("touch", "go.sum")
+	touchCMD.Stderr = os.Stderr
+	touchCMD.Dir = newDir
+	if err := touchCMD.Run(); err != nil {
+		panic(err)
+	}
+	if err := os.Chmod(filepath.Join(newDir, "go.sum"), 0777); err != nil {
+		panic(err)
+	}
+
+	// Run `go list` in tmp dir.
 	type GoList struct {
 		Dir         string   `json:"Dir"`
 		GoFiles     []string `json:"GoFiles"`
 		TestGoFiles []string `json:"XTestGoFiles"`
 	}
 
-	cmd := exec.Command("go", "list", "-json", "./...")
+	listCMD := exec.Command("go", "list", "-json", "./...")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Dir = moduleRootPath
-	err := cmd.Run()
-	if err != nil {
-		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", moduleRootPath, stderr.String(), err))
+	listCMD.Stdout = &stdout
+	listCMD.Stderr = &stderr
+	listCMD.Dir = newDir
+	if err := listCMD.Run(); err != nil {
+		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", newDir, stderr.String(), err))
 	}
 
 	var files []string
