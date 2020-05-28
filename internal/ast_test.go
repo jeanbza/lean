@@ -1,10 +1,9 @@
-package internal_test
+package internal
 
 import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/jadekler/lean/internal"
 )
 
 func TestPackageUsages(t *testing.T) {
@@ -72,7 +71,7 @@ var Z = exec.Cmd{}`,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			got := internal.PackageUsages(tc.src)
+			got := PackageUsages(tc.src)
 
 			if diff := cmp.Diff(got, tc.want); diff != "" {
 				t.Fatalf("expected %v, got %v\n\t%s", tc.want, got, diff)
@@ -85,4 +84,34 @@ func TestModuleName(t *testing.T) {
 	// TODO
 	// Basic test "github.com/user/module/pkg" -> "github.com/user/module"
 	// Stdlib test "os/exec" -> "stdlib"
+}
+
+func TestReplaceCapitalLetters(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{
+			in:   "",
+			want: "",
+		},
+		{
+			in:   "foo",
+			want: "foo",
+		},
+		{
+			in:   "FoO",
+			want: "!fo!o",
+		},
+		{
+			in:   "github.com/Shopify/sarama@v1.23.1",
+			want: "github.com/!shopify/sarama@v1.23.1",
+		},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			if got, want := replaceCapitalLetters(tc.in), tc.want; got != want {
+				t.Fatalf("got %s, want %s", got, want)
+			}
+		})
+	}
 }
