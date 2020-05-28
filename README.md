@@ -26,13 +26,13 @@ go mod graph | lean
 This is an MVP. There are several parts of this that are not fully fleshed out.
 An incomplete list:
 
+- Caching the ast + size calculation!!
 - Shorten hashes.
 - Always return sorted graph, so that graph is more consistently rendered same
 way across edge adds/deletes.
 - Calculate # vertices removed by cut per edge.
 - Calculate # bytes removed by cut per edge.
 - Calculate # usages of 'to' by 'from' per edge.
-- Show cost/value ratio per edge.
 - Refactor connectedness algorithm to use dominator tree for better performance.
 - Tests, especially around connectedness algorithms.
 - Check $GOPATH, vendor, replace directives when calculating module size & ast.
