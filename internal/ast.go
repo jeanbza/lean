@@ -33,9 +33,6 @@ var usagesCache map[string]map[string]int = make(map[string]map[string]int)
 // module dependencies are referred to.
 //
 // This is a thin cache wrapper around the real thing.
-// TODO(deklerk): Maybe stick a more formal cache in main?
-// TODO(deklerk): This is nice (and easy!), it's JIT caching. We shoud
-// pre-populate the cache from main before even rendering.
 func ModuleUsagesForModule(from, to string) int {
 	cacheMu.Lock()
 	if v, ok := usagesCache[from][to]; ok {
@@ -61,8 +58,15 @@ func moduleUsagesForModule(from, to string) int {
 
 	moduleRootPath := attemptToFindModuleOnFS(replaceCapitalLetters(from))
 	if moduleRootPath == "" {
-		// TODO: We should probably try "go get" here.
-		panic(fmt.Errorf("could not find module %s on file system. try `go get %s`?", from, from))
+		if err := goGet(from); err != nil {
+			panic(err)
+		}
+
+		// Try one more time now that we've run go get.
+		moduleRootPath = attemptToFindModuleOnFS(replaceCapitalLetters(from))
+		if moduleRootPath == "" {
+			panic(fmt.Errorf("could not find module %s on file system. try `go get %s`?", from, from))
+		}
 	}
 
 	packageCounts := PackageUsagesForModule(moduleRootPath)
@@ -250,6 +254,7 @@ func PackageUsages(src string) map[string]int {
 				} else {
 					// Named import.
 					importNames[x.Name.Name] = strings.Replace(x.Path.Value, "\"", "", -1)
+
 					// We count from -1 because the AST walk is going to find 1 extra
 					// ident occurrence - the import name itself - which we don't want to
 					// include.
@@ -321,8 +326,7 @@ func getModuleRoot(dir string) (name, root string) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Dir = dir
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", dir, stderr.String(), err))
 	}
 
@@ -345,4 +349,15 @@ func replaceCapitalLetters(s string) string {
 		s = strings.ReplaceAll(s, upper, "!"+lower)
 	}
 	return s
+}
+
+func goGet(moduleName string) error {
+	cmd := exec.Command("go", "get", moduleName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = os.TempDir() // So that it doesn't use and update the current go.mod.
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error running `go get %s`: %s", moduleName, err)
+	}
+	return nil
 }

@@ -127,6 +127,7 @@ type graph struct {
 
 // newGraph creates a new graph.
 func newGraph(r io.Reader) (*graph, error) {
+	emWorkers := make(chan bool, 20)
 	emWg := sync.WaitGroup{}
 
 	g := &graph{vertices: make(map[string]*Vertex), edges: &edgeMap{}}
@@ -163,10 +164,12 @@ func newGraph(r io.Reader) (*graph, error) {
 		//
 		// TODO(deklerk) Should this happen elsewhere, so that these goroutine
 		// and mutex interactions are a bit more clear?
+		emWorkers <- true
 		emWg.Add(1)
 		go func() {
 			g.edges.set(g.vertices[from], g.vertices[to])
 			emWg.Done()
+			<-emWorkers
 		}()
 
 		// `go mod graph` always presents the root as the first "from" node
