@@ -16,8 +16,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
+// cacheMu protects usagesCache.
+var cacheMu = sync.Mutex{}
+
+// usagesCache is a cache of ModuleUsagesForModule. It keeps track of the
+// number of references to "to" module in each "from" module.
+//
+// It's cached in ast because the number of references is not expected to change
+// anywhere in the running of this program.
 var usagesCache map[string]map[string]int = make(map[string]map[string]int)
 
 // ModuleUsagesForModule finds the number of times each of the given module's
@@ -28,16 +37,21 @@ var usagesCache map[string]map[string]int = make(map[string]map[string]int)
 // TODO(deklerk): This is nice (and easy!), it's JIT caching. We shoud
 // pre-populate the cache from main before even rendering.
 func ModuleUsagesForModule(from, to string) int {
+	cacheMu.Lock()
+	if v, ok := usagesCache[from][to]; ok {
+		cacheMu.Unlock()
+		return v
+	}
+	cacheMu.Unlock()
+	numUsages := moduleUsagesForModule(from, to)
+
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	if _, ok := usagesCache[from]; !ok {
 		usagesCache[from] = make(map[string]int)
-		numUsages := moduleUsagesForModule(from, to)
-		usagesCache[from][to] = numUsages
-		return numUsages
 	}
 	if _, ok := usagesCache[from][to]; !ok {
-		numUsages := moduleUsagesForModule(from, to)
 		usagesCache[from][to] = numUsages
-		return numUsages
 	}
 	return usagesCache[from][to]
 }

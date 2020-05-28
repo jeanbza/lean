@@ -25,10 +25,17 @@ type edge struct {
 	NumUsages int
 }
 
+// emMu protects edgeMap.
+var emMu = sync.Mutex{}
+
 // edgeMap is the map of edges in a graph.
 type edgeMap map[string]map[string]*edge
 
+// contains returns whether there's a from-to edge in edgeMap.
 func (em edgeMap) contains(from, to *Vertex) bool {
+	emMu.Lock()
+	defer emMu.Unlock()
+
 	if em == nil {
 		em = make(edgeMap)
 	}
@@ -41,17 +48,27 @@ func (em edgeMap) contains(from, to *Vertex) bool {
 	return true
 }
 
+// set creates an edge from-to.
 func (em edgeMap) set(from, to *Vertex) {
+	// This can take O(seconds), so let's do it outside the lock.
+	numUsages := internal.ModuleUsagesForModule(from.Label, to.Label)
+
+	emMu.Lock()
+	defer emMu.Unlock()
 	if em == nil {
 		em = make(edgeMap)
 	}
 	if _, ok := em[from.Label]; !ok {
 		em[from.Label] = make(map[string]*edge)
 	}
-	em[from.Label][to.Label] = &edge{From: from, To: to, NumUsages: internal.ModuleUsagesForModule(from.Label, to.Label)}
+	em[from.Label][to.Label] = &edge{From: from, To: to, NumUsages: numUsages}
 }
 
+// remove removes the edge from-to.
 func (em edgeMap) remove(from, to *Vertex) error {
+	emMu.Lock()
+	defer emMu.Unlock()
+
 	if em == nil {
 		em = make(edgeMap)
 	}
@@ -62,7 +79,11 @@ func (em edgeMap) remove(from, to *Vertex) error {
 	return nil
 }
 
+// vertices returns all vertices.
 func (em edgeMap) vertices() []*Vertex {
+	emMu.Lock()
+	defer emMu.Unlock()
+
 	var out []*Vertex
 	for _, vs := range em {
 		for _, v := range vs {
@@ -76,6 +97,9 @@ func (em edgeMap) vertices() []*Vertex {
 // Returns !(a \ b).
 // https://en.wikipedia.org/wiki/Complement_(set_theory)
 func (a edgeMap) negativeComplement(b edgeMap) edgeMap {
+	emMu.Lock()
+	defer emMu.Unlock()
+
 	out := make(edgeMap)
 	for bFrom, bTos := range b {
 		for bTo, bEdge := range bTos {
@@ -101,7 +125,10 @@ type graph struct {
 	edges    *edgeMap
 }
 
+// newGraph creates a new graph.
 func newGraph(r io.Reader) (*graph, error) {
+	emWg := sync.WaitGroup{}
+
 	g := &graph{vertices: make(map[string]*Vertex), edges: &edgeMap{}}
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -131,7 +158,16 @@ func newGraph(r io.Reader) (*graph, error) {
 			g.vertices[to] = &Vertex{Label: to, SizeBytes: sizeBytes}
 		}
 
-		g.edges.set(g.vertices[from], g.vertices[to])
+		// set performs ast calculations, which takes O(seconds). So, let's
+		// do so in a goroutine.
+		//
+		// TODO(deklerk) Should this happen elsewhere, so that these goroutine
+		// and mutex interactions are a bit more clear?
+		emWg.Add(1)
+		go func() {
+			g.edges.set(g.vertices[from], g.vertices[to])
+			emWg.Done()
+		}()
 
 		// `go mod graph` always presents the root as the first "from" node
 		if g.root == "" {
@@ -141,6 +177,7 @@ func newGraph(r io.Reader) (*graph, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+	emWg.Wait()
 	return g, nil
 }
 
@@ -167,6 +204,7 @@ func (g *graph) copy() *graph {
 	return newg
 }
 
+// addEdge adds an edge to the graph.
 func (g *graph) addEdge(from, to string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -181,6 +219,7 @@ func (g *graph) addEdge(from, to string) error {
 	return nil
 }
 
+// removeEdge removes an edge from the graph.
 func (g *graph) removeEdge(from, to string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
