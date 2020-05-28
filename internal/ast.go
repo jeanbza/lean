@@ -18,9 +18,31 @@ import (
 	"strings"
 )
 
-// PackageUsagesForModule finds the number of times each of the given module's
+var usagesCache map[string]map[string]int = make(map[string]map[string]int)
+
+// ModuleUsagesForModule finds the number of times each of the given module's
 // module dependencies are referred to.
+//
+// This is a thin cache wrapper around the real thing.
+// TODO(deklerk): Maybe stick a more formal cache in main?
+// TODO(deklerk): This is nice (and easy!), it's JIT caching. We shoud
+// pre-populate the cache from main before even rendering.
 func ModuleUsagesForModule(from, to string) int {
+	if _, ok := usagesCache[from]; !ok {
+		usagesCache[from] = make(map[string]int)
+		numUsages := moduleUsagesForModule(from, to)
+		usagesCache[from][to] = numUsages
+		return numUsages
+	}
+	if _, ok := usagesCache[from][to]; !ok {
+		numUsages := moduleUsagesForModule(from, to)
+		usagesCache[from][to] = numUsages
+		return numUsages
+	}
+	return usagesCache[from][to]
+}
+
+func moduleUsagesForModule(from, to string) int {
 	fmt.Printf("ModuleUsagesForModule(%s, %s)\n", from, to)
 
 	// TODO(deklerk): Capital letters need to be replaced with !lowercase. Ex
