@@ -45,9 +45,7 @@ func ModuleUsagesForModule(from, to string) int {
 func moduleUsagesForModule(from, to string) int {
 	fmt.Printf("ModuleUsagesForModule(%s, %s)\n", from, to)
 
-	// TODO(deklerk): Capital letters need to be replaced with !lowercase. Ex
-	// github.com/Shopify/sarama@v1.23.1 becomes github.com/!shopify/sarama@v1.23.1
-	moduleRootPath := attemptToFindModuleOnFS(from)
+	moduleRootPath := attemptToFindModuleOnFS(replaceCapitalLetters(from))
 	if moduleRootPath == "" {
 		// TODO: We should probably try "go get" here.
 		panic(fmt.Errorf("could not find module %s on file system. try `go get %s`?", from, from))
