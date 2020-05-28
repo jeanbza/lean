@@ -38,6 +38,8 @@ way across edge adds/deletes.
 
 ## Immediate TODO
 
+re: https://fasterthanli.me/blog/2020/i-want-off-mr-golangs-wild-ride/
+
 Immediate things that need fixing:
 
 - Finding `golang.org/x/tools@v0.0.0-20190524140312-2c0ae7006135` is not working.
