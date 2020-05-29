@@ -135,8 +135,12 @@ const drawList = (id, entries, clickMethod) => {
     .sort((edge1, edge2) => { // Sort by ratio.
       const e1ratio = prettifyRatio(edge1)
       const e2ratio = prettifyRatio(edge2)
-      if (e1ratio < e2ratio) return -1
-      if (e1ratio > e2ratio) return 1
+
+      if (e1ratio == '?') return 1
+      if (e2ratio == '?') return -1
+
+      if (e1ratio < e2ratio) return 1
+      if (e1ratio > e2ratio) return -1
       return 0
     })
     .forEach(edge => { // Print to page.
