@@ -218,7 +218,7 @@ func goGet(moduleName string) error {
 	dir := os.TempDir()
 
 	// Get the module, causing it to be cached.
-	cmd := exec.Command("go", "get", moduleName)
+	cmd := exec.Command("go", "get", "-d", moduleName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = dir
