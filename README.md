@@ -42,16 +42,16 @@ way across edge adds/deletes.
 
 ### Immediate TODO
 
-re: https://fasterthanli.me/blog/2020/i-want-off-mr-golangs-wild-ride/
-
 Immediate things that need fixing:
 
-- Module size should be cumulative to makethe sorting / figuring out which to
-  cut actually useful.
+- Several modules don't download. What should we do with those? See,
+  - `go get google.golang.org/genproto@v0.0.0-20190425155659-357c62f0e4bb`
+  - `go get google.golang.org/protobuf@v1.20.1-0.20200309200217-e05f789c0967`
+- Module size should be cumulative to make the sorting actually useful.
 - We should by default only show the direct dependencies of the root.
 - Finding `cloud.google.com/go` is not working (I think because submodules).
 
-Test by,
+Canonical test re: https://fasterthanli.me/blog/2020/i-want-off-mr-golangs-wild-ride/,
 
 ```
 git clone https://github.com/getlantern/idletiming
