@@ -42,7 +42,9 @@ re: https://fasterthanli.me/blog/2020/i-want-off-mr-golangs-wild-ride/
 
 Immediate things that need fixing:
 
-- Finding `golang.org/x/tools@v0.0.0-20190524140312-2c0ae7006135` is not working.
+- Module size should be cumulative to makethe sorting / figuring out which to
+  cut actually useful.
+- We should by default only show the direct dependencies of the root.
 - Finding `cloud.google.com/go` is not working (I think because submodules).
 
 Test by,

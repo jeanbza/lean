@@ -9,7 +9,11 @@ import (
 )
 
 type Vertex struct {
-	Label     string
+	// Label is the label for the vertex. It's usually the module path.
+	Label string
+
+	// SizeBytes is how much disk space, in bytes, this vertex represents. It is
+	// non-cumulative.
 	SizeBytes int64
 }
 

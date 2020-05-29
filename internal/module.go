@@ -17,6 +17,11 @@ import (
 
 type ModuleSizer struct{}
 
+// ModuleSize returns the size of the module on the OS. It is non-cumulative.
+//
+// If the module can not be found, it returns -1,nil.
+//
+// Other errors are returned as -1,err.
 func (ms *ModuleSizer) ModuleSize(module string) (int64, error) {
 	path := attemptToFindModuleOnFS(module)
 	if path == "" {
