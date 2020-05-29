@@ -96,9 +96,10 @@ func moduleFiles(moduleRootPath string) []string {
 
 	// Run `go list` in tmp dir.
 	type GoList struct {
-		Dir         string   `json:"Dir"`
-		GoFiles     []string `json:"GoFiles"`
-		TestGoFiles []string `json:"XTestGoFiles"`
+		Dir          string   `json:"Dir"`
+		GoFiles      []string `json:"GoFiles"`
+		TestGoFiles  []string `json:"TestGoFiles"`
+		XTestGoFiles []string `json:"XTestGoFiles"`
 	}
 
 	listCMD := exec.Command("go", "list", "-json", "./...")
@@ -128,8 +129,10 @@ func moduleFiles(moduleRootPath string) []string {
 		for _, f := range outDecoded.GoFiles {
 			files = append(files, filepath.Join(outDecoded.Dir, f))
 		}
-
 		for _, f := range outDecoded.TestGoFiles {
+			files = append(files, filepath.Join(outDecoded.Dir, f))
+		}
+		for _, f := range outDecoded.XTestGoFiles {
 			files = append(files, filepath.Join(outDecoded.Dir, f))
 		}
 	}

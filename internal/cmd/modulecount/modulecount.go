@@ -8,6 +8,8 @@ import (
 
 func main() {
 	p := &internal.ASTParser{}
-	c := p.ModuleUsagesForModule("golang.org/x/net@v0.0.0-20190311183353-d8887717615a", "golang.org/x/text@v0.3.0")
+	from := "github.com/aristanetworks/goarista@v0.0.0-20200131140622-c6473e3ed183"
+	to := "github.com/stretchr/testify@v1.3.0"
+	c := p.ModuleUsagesForModule(from, to)
 	fmt.Println(c)
 }
