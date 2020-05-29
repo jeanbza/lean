@@ -21,7 +21,9 @@ go install github.com/jadekler/lean && \
 go mod graph | lean
 ```
 
-## This is an MVP and is not production ready
+# Appendix
+
+### This is an MVP and is not production ready
 
 This is an MVP. There are several parts of this that are not fully fleshed out.
 An incomplete list:
@@ -36,7 +38,7 @@ way across edge adds/deletes.
 - Tests, especially around connectedness algorithms.
 - Check $GOPATH, vendor, replace directives when calculating module size & ast.
 
-## Immediate TODO
+### Immediate TODO
 
 re: https://fasterthanli.me/blog/2020/i-want-off-mr-golangs-wild-ride/
 
