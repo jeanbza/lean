@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/jadekler/lean/internal"
 )
 
 type Vertex struct {
@@ -59,14 +61,14 @@ func newGraph(r io.Reader) (*graph, error) {
 		to := parts[1]
 
 		if _, ok := g.vertices[from]; !ok {
-			sizeBytes, err := moduleSize(from)
+			sizeBytes, err := internal.ModuleSize(from)
 			if err != nil {
 				return nil, err
 			}
 			g.vertices[from] = &Vertex{Label: from, SizeBytes: sizeBytes}
 		}
 		if _, ok := g.vertices[to]; !ok {
-			sizeBytes, err := moduleSize(to)
+			sizeBytes, err := internal.ModuleSize(to)
 			if err != nil {
 				return nil, err
 			}
