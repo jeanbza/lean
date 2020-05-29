@@ -6,114 +6,15 @@ import (
 	"io"
 	"strings"
 	"sync"
-
-	"github.com/jadekler/lean/internal"
 )
 
 type Vertex struct {
 	Label     string
 	SizeBytes int64
-	// All vertices recursively dominated by this vertex.
-	// NOT YET IMPLEMENTED.
-	dominatees []*Vertex
 }
 
-type edge struct {
-	From *Vertex
-	To   *Vertex
-	// Number of times that from uses to. (AST parsing)
-	NumUsages int
-}
-
-// emMu protects edgeMap.
-var emMu = sync.Mutex{}
-
-// edgeMap is the map of edges in a graph.
-type edgeMap map[string]map[string]*edge
-
-// containsLocked returns whether there's a from-to edge in edgeMap.
-//
-// em must be locked.
-func (em edgeMap) containsLocked(from, to *Vertex) bool {
-	if em == nil {
-		em = make(edgeMap)
-	}
-	if _, ok := em[from.Label]; !ok {
-		return false
-	}
-	if _, ok := em[from.Label][to.Label]; !ok {
-		return false
-	}
-	return true
-}
-
-// set creates an edge from-to.
-func (em edgeMap) set(from, to *Vertex) {
-	// This can take O(seconds), so let's do it outside the lock.
-	numUsages := internal.ModuleUsagesForModule(from.Label, to.Label)
-
-	emMu.Lock()
-	defer emMu.Unlock()
-	if em == nil {
-		em = make(edgeMap)
-	}
-	if _, ok := em[from.Label]; !ok {
-		em[from.Label] = make(map[string]*edge)
-	}
-	em[from.Label][to.Label] = &edge{From: from, To: to, NumUsages: numUsages}
-}
-
-// remove removes the edge from-to.
-func (em edgeMap) remove(from, to *Vertex) error {
-	emMu.Lock()
-	defer emMu.Unlock()
-
-	if em == nil {
-		em = make(edgeMap)
-	}
-	if !em.containsLocked(from, to) {
-		return fmt.Errorf("edge (%s, %s) not found", from.Label, to.Label)
-	}
-	delete(em[from.Label], to.Label)
-	return nil
-}
-
-// vertices returns all vertices.
-func (em edgeMap) vertices() []*Vertex {
-	emMu.Lock()
-	defer emMu.Unlock()
-
-	var out []*Vertex
-	for _, vs := range em {
-		for _, v := range vs {
-			out = append(out, v.From)
-			out = append(out, v.To)
-		}
-	}
-	return out
-}
-
-// Returns !(a \ b).
-// https://en.wikipedia.org/wiki/Complement_(set_theory)
-func (a edgeMap) negativeComplement(b edgeMap) edgeMap {
-	emMu.Lock()
-	defer emMu.Unlock()
-
-	out := make(edgeMap)
-	for bFrom, bTos := range b {
-		for bTo, bEdge := range bTos {
-			if _, ok := a[bFrom]; ok {
-				if _, ok := a[bFrom][bTo]; ok {
-					continue
-				}
-			}
-			if _, ok := out[bFrom]; !ok {
-				out[bFrom] = make(map[string]*edge)
-			}
-			out[bFrom][bTo] = bEdge
-		}
-	}
-	return out
+func (v *Vertex) String() string {
+	return fmt.Sprintf("{Label: %q, SizeBytes: %d}", v.Label, v.SizeBytes)
 }
 
 type graph struct {
@@ -122,6 +23,20 @@ type graph struct {
 	mu       sync.Mutex
 	vertices map[string]*Vertex
 	edges    *edgeMap
+}
+
+func (g *graph) String() string {
+	s := "{\n\t"
+	first := true
+	for k, v := range g.vertices {
+		if !first {
+			s += ",\n\t"
+		}
+		s += fmt.Sprintf("%s: %s", k, v)
+		first = false
+	}
+	s += "\n}"
+	return fmt.Sprintf("{root: %s, vertices: %s, edges: %s}", g.root, s, g.edges)
 }
 
 // newGraph creates a new graph.
@@ -158,6 +73,9 @@ func newGraph(r io.Reader) (*graph, error) {
 			g.vertices[to] = &Vertex{Label: to, SizeBytes: sizeBytes}
 		}
 
+		fromV := g.vertices[from]
+		toV := g.vertices[to]
+
 		// set performs ast calculations, which takes O(seconds). So, let's
 		// do so in a goroutine.
 		//
@@ -166,7 +84,7 @@ func newGraph(r io.Reader) (*graph, error) {
 		emWorkers <- true
 		emWg.Add(1)
 		go func() {
-			g.edges.set(g.vertices[from], g.vertices[to])
+			g.edges.set(fromV, toV)
 			emWg.Done()
 			<-emWorkers
 		}()
@@ -292,7 +210,19 @@ func (g *graph) hypotheticalCut(from, to string) (edgeMap, []string, error) {
 
 	av := a.vertices()
 	bv := b.vertices()
-	return a.negativeComplement(b), negativeComplementVertices(av, bv), nil
+
+	cutEdges := a.negativeComplement(b)
+	cutEdges.set(g.vertices[from], g.vertices[to]) // add the recently cut edge
+
+	// Kind of hacky workaround for the fact that when b has no downstream
+	// edges, the cut edgeMap has no vertices (because it only tracks edges,
+	// which there are none of).
+	cutVertices := negativeComplementVertices(av, bv)
+	if len(cutVertices) == 0 {
+		cutVertices = append(cutVertices, to)
+	}
+
+	return cutEdges, cutVertices, nil
 }
 
 // Returns !(a \ b).

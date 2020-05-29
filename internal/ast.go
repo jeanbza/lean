@@ -19,6 +19,8 @@ import (
 	"sync"
 )
 
+type ASTParser struct{}
+
 // cacheMu protects usagesCache.
 var cacheMu = sync.Mutex{}
 
@@ -33,7 +35,7 @@ var usagesCache map[string]map[string]int = make(map[string]map[string]int)
 // module dependencies are referred to.
 //
 // This is a thin cache wrapper around the real thing.
-func ModuleUsagesForModule(from, to string) int {
+func (*ASTParser) ModuleUsagesForModule(from, to string) int {
 	cacheMu.Lock()
 	if v, ok := usagesCache[from][to]; ok {
 		cacheMu.Unlock()
@@ -54,7 +56,7 @@ func ModuleUsagesForModule(from, to string) int {
 }
 
 func moduleUsagesForModule(from, to string) int {
-	fmt.Printf("ModuleUsagesForModule(%s, %s)\n", from, to)
+	fmt.Printf("Analyzing edge (%s, %s)\n", from, to)
 
 	moduleRootPath := attemptToFindModuleOnFS(replaceCapitalLetters(from))
 	if moduleRootPath == "" {

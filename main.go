@@ -24,14 +24,22 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jadekler/lean/internal"
 	"github.com/jadekler/lean/static"
 )
+
+// Only exists to make the ast parser pluggable, since we don't want our tests
+// to cause file system reads.
+type ReplaceableASTParser interface {
+	ModuleUsagesForModule(from, to string) int
+}
 
 var (
 	mu            sync.Mutex
 	originalGraph *graph
 	userGraph     *graph
-	shoppingCart  = make(map[string]map[string]struct{})
+	shoppingCart                       = make(map[string]map[string]struct{})
+	astParser     ReplaceableASTParser = &internal.ASTParser{}
 )
 
 func usage() {
