@@ -3,6 +3,8 @@
 lean helps users understand their module dependency graph, and find low-cost,
 high-value cuts that can be made to reduce the dependency graph size.
 
+![](https://user-images.githubusercontent.com/3584893/83226438-42908300-a13f-11ea-8082-7e2dbe7193ca.png)
+
 ## Running
 
 ```
