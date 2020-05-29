@@ -15,6 +15,29 @@ import (
 	"strings"
 )
 
+type ModuleSizer struct{}
+
+func (ms *ModuleSizer) ModuleSize(module string) (int64, error) {
+	path := attemptToFindModuleOnFS(module)
+	if path == "" {
+		return -1, nil
+	}
+
+	var size int64
+	if err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	}); err != nil {
+		return -1, err
+	}
+	return size, nil
+}
+
 // moduleName takes a packageName and attempts to figure out the module name. It
 // does so by looking in $GOPATH/pkg/mod and gradually stripping away parts
 // (ex /foo) from the packageName until it finds a directory (module) that
@@ -129,29 +152,6 @@ func moduleFiles(moduleRootPath string) []string {
 	}
 
 	return files
-}
-
-var gopathDir = build.Default.GOPATH
-
-func ModuleSize(module string) (int64, error) {
-	path := attemptToFindModuleOnFS(module)
-	if path == "" {
-		return -1, nil
-	}
-
-	var size int64
-	if err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			size += info.Size()
-		}
-		return nil
-	}); err != nil {
-		return -1, err
-	}
-	return size, nil
 }
 
 var versionRegexp = regexp.MustCompile("(.+)/v[0-9]+")

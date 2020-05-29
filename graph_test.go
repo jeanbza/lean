@@ -7,6 +7,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// Implements ReplaceableModuleSizer.
+type testModuleSizer struct{}
+
+func (*testModuleSizer) ModuleSize(string) (int64, error) {
+	return -1, nil
+}
+
 // Implements ReplaceableASTParser.
 type testASTParser struct{}
 
@@ -15,6 +22,7 @@ func (*testASTParser) ModuleUsagesForModule(string, string) int {
 }
 
 func TestHypotheticalCut(t *testing.T) {
+	moduleSizer = &testModuleSizer{}
 	astParser = &testASTParser{}
 
 	for _, tc := range []struct {
@@ -70,6 +78,7 @@ github.com/bar github.com/gaz`,
 }
 
 func TestConnected(t *testing.T) {
+	moduleSizer = &testModuleSizer{}
 	astParser = &testASTParser{}
 
 	for _, tc := range []struct {

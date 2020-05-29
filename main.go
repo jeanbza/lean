@@ -28,6 +28,12 @@ import (
 	"github.com/jadekler/lean/static"
 )
 
+// Only exists to make the module sizer pluggable, since we don't want our tests
+// to cause file system reads.
+type ReplaceableModuleSizer interface {
+	ModuleSize(string) (int64, error)
+}
+
 // Only exists to make the ast parser pluggable, since we don't want our tests
 // to cause file system reads.
 type ReplaceableASTParser interface {
@@ -38,8 +44,9 @@ var (
 	mu            sync.Mutex
 	originalGraph *graph
 	userGraph     *graph
-	shoppingCart                       = make(map[string]map[string]struct{})
-	astParser     ReplaceableASTParser = &internal.ASTParser{}
+	shoppingCart                         = make(map[string]map[string]struct{})
+	moduleSizer   ReplaceableModuleSizer = &internal.ModuleSizer{}
+	astParser     ReplaceableASTParser   = &internal.ASTParser{}
 )
 
 func usage() {
