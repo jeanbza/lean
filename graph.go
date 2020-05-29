@@ -31,11 +31,10 @@ var emMu = sync.Mutex{}
 // edgeMap is the map of edges in a graph.
 type edgeMap map[string]map[string]*edge
 
-// contains returns whether there's a from-to edge in edgeMap.
-func (em edgeMap) contains(from, to *Vertex) bool {
-	emMu.Lock()
-	defer emMu.Unlock()
-
+// containsLocked returns whether there's a from-to edge in edgeMap.
+//
+// em must be locked.
+func (em edgeMap) containsLocked(from, to *Vertex) bool {
 	if em == nil {
 		em = make(edgeMap)
 	}
@@ -72,7 +71,7 @@ func (em edgeMap) remove(from, to *Vertex) error {
 	if em == nil {
 		em = make(edgeMap)
 	}
-	if !em.contains(from, to) {
+	if !em.containsLocked(from, to) {
 		return fmt.Errorf("edge (%s, %s) not found", from.Label, to.Label)
 	}
 	delete(em[from.Label], to.Label)
@@ -277,7 +276,7 @@ func (g *graph) hypotheticalCut(from, to string) (edgeMap, []string, error) {
 		g.mu.Unlock()
 		return nil, nil, fmt.Errorf("vertex %s does not exist", to)
 	}
-	if !g.edges.contains(g.vertices[from], g.vertices[to]) {
+	if !g.edges.containsLocked(g.vertices[from], g.vertices[to]) {
 		g.mu.Unlock()
 		return nil, nil, fmt.Errorf("edge (%s, %s) does not exist", from, to)
 	}
@@ -291,7 +290,9 @@ func (g *graph) hypotheticalCut(from, to string) (edgeMap, []string, error) {
 	a := cut.connected(cut.root)
 	b := cut.connected(to)
 
-	return a.negativeComplement(b), negativeComplementVertices(a.vertices(), b.vertices()), nil
+	av := a.vertices()
+	bv := b.vertices()
+	return a.negativeComplement(b), negativeComplementVertices(av, bv), nil
 }
 
 // Returns !(a \ b).
