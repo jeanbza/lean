@@ -54,21 +54,21 @@ func moduleUsagesForModule(from, to string) int {
 		panic(fmt.Errorf("could not find module %s on file system. try `go get %s`?", from, from))
 	}
 
-	packageCounts := PackageUsagesForModule(moduleRootPath)
-
-	for p, c := range packageCounts {
-		// TODO(deklerk): This basically looks for the first module that looks
-		// like the given package. This falls down in two places:
-		// 1. v1 would match a v2 (substring match!). etc for all version
-		// 2. github.com/user/module/foo/submod/pkg would match
-		// github.com/user/module/foo/submod (good!) as well as
-		// parent github.com/user/module (bad!)
-		if strings.Contains(to, p) {
-			return c
+	var moduleCount int
+	toModuleName := moduleNameFromModulePath(to)
+	for p, c := range PackageUsagesForModule(moduleRootPath) {
+		// This sums all package that looks like the given module.
+		//
+		// TODO(deklerk): This falls down in two places:
+		//   1. v1 would match a v2 (substring match!). etc for all version
+		//   2. github.com/user/module/foo/submod/pkg would match github.com/user/module/foo/submod (good!)
+		//      as well as parent github.com/user/module (bad!)
+		if strings.Contains(p, toModuleName) {
+			moduleCount += c
 		}
 	}
 
-	return 0
+	return moduleCount
 }
 
 // PackageUsagesForModule finds the number of times each of the given module's

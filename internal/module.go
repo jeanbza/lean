@@ -3,7 +3,6 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go/build"
 	"io"
@@ -38,38 +37,22 @@ func (ms *ModuleSizer) ModuleSize(module string) (int64, error) {
 	return size, nil
 }
 
-// moduleName takes a packageName and attempts to figure out the module name. It
-// does so by looking in $GOPATH/pkg/mod and gradually stripping away parts
-// (ex /foo) from the packageName until it finds a directory (module) that
-// matches.
+// moduleNameFromModulePath takes a modulePath and attempts to figure out the
+// module name.
 //
-// TODO: This is hacky - it'd be much nicer if there was a library that figured
-// this out holistically, or perhaps by querying module proxy.
-func moduleName(packageName string) string {
-	parts := strings.Split(packageName, "/")
-
-	for i := range parts {
-		modulePathParts := append([]string{build.Default.GOPATH, "pkg", "mod"}, parts[0:len(parts)-1-i]...)
-		fi, err := os.Stat(filepath.Join(modulePathParts...))
-		if _, ok := err.(*os.PathError); ok {
-			// If this isn't a directory - keep going!
-			continue
-		}
-		if err != nil {
-			// Ok this is actually a real error.
-			panic(err)
-		}
-		if fi.IsDir() {
-			mn := strings.Join(parts[0:len(parts)-1-i], "/")
-			if mn == "" {
-				// Probably stdlib (something like "io" or "io/ioutil").
-				return "stdlib"
-			}
-			return mn
-		}
+// For example, something like golang.org/x/text@v0.3.0 becomes
+// golang.org/x/text.
+//
+// It panics if it encounters an error or can't figure out the module name.
+//
+// TODO: It'd be much nicer if there was a library that figured this out
+// holistically, or perhaps by querying module proxy.
+func moduleNameFromModulePath(modulePath string) string {
+	parts := strings.Split(modulePath, "@")
+	if len(parts) != 2 {
+		panic(fmt.Sprintf("couldn't figure out module name from module path %s", modulePath))
 	}
-
-	panic(errors.New("this should not have happened..."))
+	return parts[0]
 }
 
 // moduleFiles finds all the files of a module (given the module's root path).
