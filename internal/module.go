@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -56,6 +57,7 @@ func moduleNameFromModulePath(modulePath string) string {
 }
 
 // moduleFiles finds all the files of a module (given the module's root path).
+//
 // TODO(deklerk): We need to copy the $GOPATH/mod/pkg to /tmp first, since
 // $GOPATH is protected by -mod=readonly.
 func moduleFiles(moduleRootPath string) []string {
@@ -226,4 +228,90 @@ func goGet(moduleName string) error {
 	}
 
 	return nil
+}
+
+// indirectModules returns the // indirect module references in the given
+// moduleRootPath's go.mod.
+//
+// TODO(deklerk): We need to copy the $GOPATH/mod/pkg to /tmp first, since
+// $GOPATH is protected by -mod=readonly.
+func indirectModules(moduleRootPath string) []string {
+	// Copy $GOPATH/mod/pkg/moduleRootPath to /tmp because we can't run
+	// `go list` in $GOPATH due to -mod=readonly restriction.
+	tmpdir, err := ioutil.TempDir("", "list-tmp")
+	if err != nil {
+		panic(err)
+	}
+
+	newDir := tmpdir + "/listme"
+	cpCMD := exec.Command("cp", "-R", moduleRootPath, newDir)
+	cpCMD.Stderr = os.Stderr
+	if err := cpCMD.Run(); err != nil {
+		panic(err)
+	}
+
+	// Set permissions so that we can modify go.mod / go.sum. (well, so that
+	// go list can)
+	//
+	// NOTE: This won't work on windows, will it? 0777 looks very linux
+	// specific.
+	if err := os.Chmod(newDir, 0777); err != nil {
+		panic(err)
+	}
+	if err := os.Chmod(filepath.Join(newDir, "go.mod"), 0777); err != nil {
+		panic(err)
+	}
+	touchCMD := exec.Command("touch", "go.sum")
+	touchCMD.Stderr = os.Stderr
+	touchCMD.Dir = newDir
+	if err := touchCMD.Run(); err != nil {
+		panic(err)
+	}
+	if err := os.Chmod(filepath.Join(newDir, "go.sum"), 0777); err != nil {
+		panic(err)
+	}
+
+	// Run `go list` in tmp dir.
+	type Module struct {
+		Name     string `json:"name"`
+		Indirect bool   `json:"indirect"`
+	}
+
+	cmd := exec.Command("go", "list", "-f", `{"name":"{{.Path}}","indirect":{{.Indirect}}}`, "-m", "all")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	cmd.Dir = newDir
+
+	if err := cmd.Run(); err != nil {
+		panic(fmt.Errorf(`failed to run $(cd %s && go list -f '{"name":"{{.Path}}","indirect":{{.Indirect}}}' -m all :\n%s\n%v}`, newDir, stderr.String(), err))
+	}
+
+	var modules []Module
+	b := bufio.NewReader(&stdout)
+	for {
+		line, err := b.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
+		module := Module{}
+		buf := bytes.NewBufferString(line)
+		if err := json.NewDecoder(buf).Decode(&module); err != nil {
+			panic(err)
+		}
+		modules = append(modules, module)
+	}
+
+	var indirect []string
+	for _, v := range modules {
+		if v.Indirect {
+			indirect = append(indirect, v.Name)
+		}
+	}
+
+	return indirect
 }

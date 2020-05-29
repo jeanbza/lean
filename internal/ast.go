@@ -89,6 +89,10 @@ func PackageUsagesForModule(moduleRootPath string) map[string]int {
 		}
 	}
 
+	for _, moduleName := range indirectModules(moduleRootPath) {
+		moduleUsages[moduleName] = 1
+	}
+
 	return moduleUsages
 }
 
