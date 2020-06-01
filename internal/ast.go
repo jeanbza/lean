@@ -56,7 +56,7 @@ func moduleUsagesForModule(from, to string) int {
 
 	var moduleCount int
 	toModuleName := moduleNameFromModulePath(to)
-	for p, c := range PackageUsagesForModule(moduleRootPath) {
+	for p, c := range packageUsagesForModule(moduleRootPath) {
 		// This sums all package that looks like the given module.
 		//
 		// TODO(deklerk): This falls down in two places:
@@ -71,10 +71,14 @@ func moduleUsagesForModule(from, to string) int {
 	return moduleCount
 }
 
-// PackageUsagesForModule finds the number of times each of the given module's
+// packageUsagesForModule finds the number of times each of the given module's
 // package dependencies are referred to.
-func PackageUsagesForModule(moduleRootPath string) map[string]int {
-	files := moduleFiles(moduleRootPath)
+func packageUsagesForModule(moduleRootPath string) map[string]int {
+	files, cleanup, err := moduleFiles(moduleRootPath)
+	if err != nil {
+		panic(fmt.Errorf("error getting module files: %s", err))
+	}
+	defer cleanup()
 
 	moduleUsages := make(map[string]int)
 

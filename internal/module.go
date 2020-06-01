@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"go/build"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,40 +64,10 @@ func moduleNameFromModulePath(modulePath string) string {
 //
 // TODO(deklerk): We need to copy the $GOPATH/mod/pkg to /tmp first, since
 // $GOPATH is protected by -mod=readonly.
-func moduleFiles(moduleRootPath string) []string {
-	// Copy $GOPATH/mod/pkg/moduleRootPath to /tmp because we can't run
-	// `go list` in $GOPATH due to -mod=readonly restriction.
-	tmpdir, err := ioutil.TempDir("", "list-tmp")
+func moduleFiles(moduleRootPath string) (moduleFiles []string, cleanup func(), _ error) {
+	tmpWorkDir, cleanup, err := readableModCache(moduleRootPath)
 	if err != nil {
-		panic(err)
-	}
-
-	newDir := tmpdir + "/listme"
-	cpCMD := exec.Command("cp", "-R", moduleRootPath, newDir)
-	cpCMD.Stderr = os.Stderr
-	if err := cpCMD.Run(); err != nil {
-		panic(err)
-	}
-
-	// Set permissions so that we can modify go.mod / go.sum. (well, so that
-	// go list can)
-	//
-	// NOTE: This won't work on windows, will it? 0777 looks very linux
-	// specific.
-	if err := os.Chmod(newDir, 0777); err != nil {
-		panic(err)
-	}
-	if err := os.Chmod(filepath.Join(newDir, "go.mod"), 0777); err != nil {
-		panic(err)
-	}
-	touchCMD := exec.Command("touch", "go.sum")
-	touchCMD.Stderr = os.Stderr
-	touchCMD.Dir = newDir
-	if err := touchCMD.Run(); err != nil {
-		panic(err)
-	}
-	if err := os.Chmod(filepath.Join(newDir, "go.sum"), 0777); err != nil {
-		panic(err)
+		return nil, nil, fmt.Errorf("failed to create a readable copy of %s: %s", moduleRootPath, err)
 	}
 
 	// Run `go list` in tmp dir.
@@ -114,9 +83,9 @@ func moduleFiles(moduleRootPath string) []string {
 	var stderr bytes.Buffer
 	listCMD.Stdout = &stdout
 	listCMD.Stderr = &stderr
-	listCMD.Dir = newDir
+	listCMD.Dir = tmpWorkDir
 	if err := listCMD.Run(); err != nil {
-		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", newDir, stderr.String(), err))
+		return nil, nil, fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", tmpWorkDir, stderr.String(), err)
 	}
 
 	var files []string
@@ -130,7 +99,7 @@ func moduleFiles(moduleRootPath string) []string {
 			break
 		}
 		if err != nil {
-			panic(err)
+			return nil, nil, fmt.Errorf("error decoding go list -json output: %s", err)
 		}
 
 		for _, f := range outDecoded.GoFiles {
@@ -144,11 +113,15 @@ func moduleFiles(moduleRootPath string) []string {
 		}
 	}
 
-	return files
+	return files, cleanup, nil
 }
 
 var versionRegexp = regexp.MustCompile("(.+)/v[0-9]+")
 
+// attemptToFindModuleOnFS attempts to find module on the fs. If it's found, it
+// returns the filepath. If not, it returns empty string.
+//
+// As part of its attempts, it will `go get` missing modules.
 func attemptToFindModuleOnFS(module string) string {
 	module = replaceCapitalLetters(module)
 
@@ -163,6 +136,14 @@ func attemptToFindModuleOnFS(module string) string {
 	return findOnFS(module)
 }
 
+// findOnFS checks whether the given module is in,
+// - $GOPATH/pkg/mod/<module-path>
+// - $CURDIR/
+//
+// If it finds the module at one of the above, it returns the filepath. If not,
+// it returns empty.
+//
+// TODO: It should try $CURDIR/vendor, too.
 func findOnFS(module string) string {
 	gopathAttempt := filepath.Join(build.Default.GOPATH, "pkg", "mod", module)
 	if _, err := os.Stat(gopathAttempt); err == nil {
@@ -241,40 +222,11 @@ func goGet(moduleName string) error {
 // TODO(deklerk): We need to copy the $GOPATH/mod/pkg to /tmp first, since
 // $GOPATH is protected by -mod=readonly.
 func indirectModules(moduleRootPath string) []string {
-	// Copy $GOPATH/mod/pkg/moduleRootPath to /tmp because we can't run
-	// `go list` in $GOPATH due to -mod=readonly restriction.
-	tmpdir, err := ioutil.TempDir("", "list-tmp")
+	tmpWorkDir, cleanup, err := readableModCache(moduleRootPath)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to create a readable copy of %s: %s", moduleRootPath, err))
 	}
-
-	newDir := tmpdir + "/listme"
-	cpCMD := exec.Command("cp", "-R", moduleRootPath, newDir)
-	cpCMD.Stderr = os.Stderr
-	if err := cpCMD.Run(); err != nil {
-		panic(err)
-	}
-
-	// Set permissions so that we can modify go.mod / go.sum. (well, so that
-	// go list can)
-	//
-	// NOTE: This won't work on windows, will it? 0777 looks very linux
-	// specific.
-	if err := os.Chmod(newDir, 0777); err != nil {
-		panic(err)
-	}
-	if err := os.Chmod(filepath.Join(newDir, "go.mod"), 0777); err != nil {
-		panic(err)
-	}
-	touchCMD := exec.Command("touch", "go.sum")
-	touchCMD.Stderr = os.Stderr
-	touchCMD.Dir = newDir
-	if err := touchCMD.Run(); err != nil {
-		panic(err)
-	}
-	if err := os.Chmod(filepath.Join(newDir, "go.sum"), 0777); err != nil {
-		panic(err)
-	}
+	defer cleanup()
 
 	// Run `go list` in tmp dir.
 	type Module struct {
@@ -287,10 +239,10 @@ func indirectModules(moduleRootPath string) []string {
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	cmd.Dir = newDir
+	cmd.Dir = tmpWorkDir
 
 	if err := cmd.Run(); err != nil {
-		panic(fmt.Errorf(`failed to run $(cd %s && go list -f '{"name":"{{.Path}}","indirect":{{.Indirect}}}' -m all :\n%s\n%v}`, newDir, stderr.String(), err))
+		panic(fmt.Errorf(`failed to run $(cd %s && go list -f '{"name":"{{.Path}}","indirect":{{.Indirect}}}' -m all :\n%s\n%v}`, tmpWorkDir, stderr.String(), err))
 	}
 
 	var modules []Module
