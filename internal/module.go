@@ -78,14 +78,14 @@ func moduleFiles(moduleRootPath string) (moduleFiles []string, cleanup func(), _
 		XTestGoFiles []string `json:"XTestGoFiles"`
 	}
 
-	listCMD := exec.Command("go", "list", "-json", "./...")
+	listCMD := exec.Command("go", "list", "-mod=readonly", "-json", "./...")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	listCMD.Stdout = &stdout
 	listCMD.Stderr = &stderr
 	listCMD.Dir = tmpWorkDir
 	if err := listCMD.Run(); err != nil {
-		return nil, nil, fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", tmpWorkDir, stderr.String(), err)
+		return nil, nil, fmt.Errorf("failed to run `cd %s && go list -mod=readonly -json ./...`:\n%s\n%v", tmpWorkDir, stderr.String(), err)
 	}
 
 	var files []string
@@ -176,14 +176,14 @@ func getModuleRoot(dir string) (name, root string) {
 
 	decoded := GoListOutput{}
 
-	cmd := exec.Command("go", "list", "-json", "./...")
+	cmd := exec.Command("go", "list", "-mod=readonly", "-json", "./...")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
-		panic(fmt.Errorf("failed to run `cd %s && go list -json ./...`:\n%s\n%v", dir, stderr.String(), err))
+		panic(fmt.Errorf("failed to run `cd %s && go list -mod=readonly -json ./...`:\n%s\n%v", dir, stderr.String(), err))
 	}
 
 	if err := json.NewDecoder(&stdout).Decode(&decoded); err != nil {
@@ -234,7 +234,7 @@ func indirectModules(moduleRootPath string) []string {
 		Indirect bool   `json:"indirect"`
 	}
 
-	cmd := exec.Command("go", "list", "-f", `{"name":"{{.Path}}","indirect":{{.Indirect}}}`, "-m", "all")
+	cmd := exec.Command("go", "list", "-mod=readonly", "-f", `{"name":"{{.Path}}","indirect":{{.Indirect}}}`, "-m", "all")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -242,7 +242,7 @@ func indirectModules(moduleRootPath string) []string {
 	cmd.Dir = tmpWorkDir
 
 	if err := cmd.Run(); err != nil {
-		panic(fmt.Errorf(`failed to run $(cd %s && go list -f '{"name":"{{.Path}}","indirect":{{.Indirect}}}' -m all :\n%s\n%v}`, tmpWorkDir, stderr.String(), err))
+		panic(fmt.Errorf(`failed to run $(cd %s && go list -mod=readonly -f '{"name":"{{.Path}}","indirect":{{.Indirect}}}' -m all :\n%s\n%v}`, tmpWorkDir, stderr.String(), err))
 	}
 
 	var modules []Module
