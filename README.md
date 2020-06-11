@@ -8,7 +8,7 @@ high-value cuts that can be made to reduce the dependency graph size.
 ## Running
 
 ```
-go install github.com/jadekler/lean
+go get github.com/jadekler/lean
 cd /path/to/my/project
 go mod graph | lean
 ```
